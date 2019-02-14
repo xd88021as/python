@@ -1,0 +1,103 @@
+# -*- coding: UTF-8 -*-
+import time  
+from firebase import firebase
+url = 'https://nkmu2017mis.firebaseio.com/'
+fb = firebase.FirebaseApplication(url, None)			'''讀取FireBase的資料到變數fb'''
+
+user = fb.get('/使用者',None)					'''讀取FireBase的使用者資料到user'''
+temp = 1
+for key,value in user.items():					'''給每個使用者一個編號以便進行之後的推薦分析'''
+	user[key].update({'使用者號': temp})
+	temp+=1
+with open('user.data', 'w', encoding='UTF-8') as f:		'''將資料儲存至user.data檔'''
+	for key,value in user.items():
+		x= '{},{},{},{}\n'.format(value['使用者號'],key,value['帳號'],value['暱稱'])	'''儲存格式:使用者,FireBase隨機編號,帳號,暱稱'''
+		f.write(str(x))
+
+'''此段為建立景點資料'''
+
+def getattraction(location):
+	attractionscore = fb.get('/{}景點評分資料'.format(location), None)		'''讀取FireBase的景點評分資料到attractionscore'''
+	for score,svalue in attractionscore.items():					'''將景點評分資料和使用者資料做連結'''
+		for kuser,uvalue in user.items():
+			if svalue['使用者編號'] == kuser:
+				attractionscore[score].update({'使用者號':uvalue['使用者號']})
+				break
+
+	with open('attractionscore.data', 'w', encoding='UTF-8') as f:			'''將連結後的資料存入attractionscore.data檔'''
+		for key,value in attractionscore.items():
+			x='{},{},{},{},{}\n'.format(value["使用者號"],value["景點編號"],value['評分'],key,value['使用者編號'])
+			f.write(str(x))
+
+	attraction = fb.get('/{}景點資料'.format(location),None)			'''讀取FireBase的景點資料到attraction'''
+	with open('attraction.data', 'w', encoding='UTF-8') as f:			
+		for key,value in attraction.items():					'''將資料存入attraction.data'''
+			x='{},{},{},{}\n'.format(value['景點編號'],value['景點'],value['經度'],value['緯度'])
+			f.write(str(x))
+
+'''此段為建立商家資料 比照景點資料的建立方式'''
+
+def getbusiness(location):
+	businessscore = fb.get('/{}商家評分資料'.format(location), None)
+	for score,svalue in businessscore.items():
+		for kuser,uvalue in user.items():
+			if svalue['使用者編號'] == kuser:
+				businessscore[score].update({'使用者號':uvalue['使用者號']})
+				break
+	with open('businessscore.data', 'w', encoding='UTF-8') as f:
+		for key,value in businessscore.items():
+			x='{},{},{},{},{}\n'.format(value["使用者號"],value["商家編號"],value['評分'],key,value['使用者編號'])
+			f.write(str(x))
+	business = fb.get('/{}商家資料'.format(location),None)
+	with open('business.data', 'w', encoding='UTF-8') as f:
+		for key,value in business.items():
+			x='{},{},{},{}\n'.format(value['商家編號'],value['商家'],value['經度'],value['緯度'])
+			f.write(str(x))
+
+'''此段為建立旅館資料 比照景點資料的建立方式'''
+
+def gethostel(location):
+	businessscore = fb.get('/{}旅館評分資料'.format(location), None)
+	for score,svalue in businessscore.items():
+		for kuser,uvalue in user.items():
+			if svalue['使用者編號'] == kuser:
+				businessscore[score].update({'使用者號':uvalue['使用者號']})
+				break
+	with open('hostelscore.data', 'w', encoding='UTF-8') as f:
+		for key,value in businessscore.items():
+			x='{},{},{},{},{}\n'.format(value["使用者號"],value["旅館編號"],value['評分'],key,value['使用者編號'])
+			f.write(str(x))
+	business = fb.get('/{}旅館資料'.format(location),None)
+	with open('hostel.data', 'w', encoding='UTF-8') as f:
+		for key,value in business.items():
+			x='{},{},{},{}\n'.format(value['旅館編號'],value['旅館'],value['經度'],value['緯度'])
+			f.write(str(x))
+
+'''此段為建立餐廳資料 比照景點資料的建立方式'''
+
+def getrestaurant(location):
+	restaurantscore = fb.get('/{}餐廳評分資料'.format(location), None)
+	for score,svalue in restaurantscore.items():
+		for kuser,uvalue in user.items():
+			if svalue['使用者編號'] == kuser:
+				restaurantscore[score].update({'使用者號':uvalue['使用者號']})
+				break
+	with open('restaurantscore.data', 'w', encoding='UTF-8') as f:
+		for key,value in restaurantscore.items():
+			x='{},{},{},{},{}\n'.format(value["使用者號"],value["餐廳編號"],value['評分'],key,value['使用者編號'])
+			f.write(str(x))
+	restaurant = fb.get('/{}餐廳資料'.format(location),None)
+	with open('restaurant.data', 'w', encoding='UTF-8') as f:
+		for key,value in restaurant.items():
+			x='{},{},{},{}\n'.format(value['餐廳編號'],value['餐廳'],value['經度'],value['緯度'])
+			f.write(str(x))
+
+
+if __name__ == "__main__":
+    location = ''
+    getattraction(location)		'''呼叫getattraction建立景點資料'''
+    getbusiness(location)		'''呼叫getbusiness建立商家資料'''
+    gethostel(location)			'''呼叫gethostel建立旅館資料'''
+    getrestaurant(location)		'''呼叫getrestaurant建立餐廳資料'''
+
+

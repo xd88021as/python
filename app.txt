@@ -1,0 +1,126 @@
+# -*- coding:utf-8 -*-
+from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
+import sys, os
+from pyspark import SparkConf, SparkContext
+from pyspark.mllib.recommendation import  MatrixFactorizationModel
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
+app = Flask(__name__)
+CORS(app, resources=r'/*')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+#簡易的Flask後端伺服器
+@app.route('/data/', methods=['GET','POST'])
+def data():
+    userID= request.form['userid']
+    category= request.form['category']
+    temp=link(str(userID))
+    if str(category) == '景點':
+	anser= jsonify(Recommend(attractionmodel, attractionTitle, int(temp), category, 1))
+    elif str(category) == '商家':
+	anser= jsonify(Recommend(businessmodel, businessTitle, int(temp), category, 2))
+    elif str(category) == '旅館':
+	anser= jsonify(Recommend(hostelmodel, hostelTitle, int(temp), category, 4))
+    elif str(category) == '餐廳':
+	anser= jsonify(Recommend(restaurantmodel, restaurantTitle, int(temp), category, 3))
+    return anser
+
+
+#編號與user資料做連結
+def link(ID):
+    with open('user.data', 'r') as f:
+	for line in f:
+	    temp= line.split(',')
+	    if ID == str(temp[1]):
+		return str(temp[0])
+	  
+def CreateSparkContext():
+    sparkConf = SparkConf().setAppName("app").set("spark.ui.showConsoleProgress", "false")
+    sc = SparkContext(conf = sparkConf)
+    print("master="+sc.master)
+    SetLogger(sc)
+    SetPath(sc)
+    return (sc)
+
+def SetPath(sc):
+    global Path
+    if sc.master[0:5]=="local" :
+        Path="file:/home/mis/mis/"
+    else:   
+        Path="hdfs://master:9000/user/mis/"
+
+def SetLogger( sc ):
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
+    logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
+
+#讀取attraction.data檔的資料景點,並分割成陣列以便推薦分析
+def Prepareattraction(sc): 
+    itemRDD = sc.textFile(Path+"data/attraction.data") 
+    attractionTitle= itemRDD.map( lambda line : line.split(",")).map(lambda a: (float(a[0]),a[1])).collectAsMap()                          
+    return(attractionTitle)
+
+#讀取business.data檔的資料景點,並分割成陣列以便推薦分析
+def Preparebusiness(sc): 
+    itemRDD = sc.textFile(Path+"data/business.data") 
+    businessTitle= itemRDD.map( lambda line : line.split(",")).map(lambda a: (float(a[0]),a[1])).collectAsMap()                          
+    return(businessTitle)
+
+#讀取restaurant.data檔的資料景點,並分割成陣列以便推薦分析
+def Preparerestaurant(sc): 
+    itemRDD = sc.textFile(Path+"data/restaurant.data") 
+    restaurantTitle= itemRDD.map( lambda line : line.split(",")).map(lambda a: (float(a[0]),a[1])).collectAsMap()                          
+    return(restaurantTitle)
+
+#讀取hostel.data檔的資料景點,並分割成陣列以便推薦分析
+def Preparehostel(sc): 
+    itemRDD = sc.textFile(Path+"data/hostel.data") 
+    hostelTitle= itemRDD.map( lambda line : line.split(",")).map(lambda a: (float(a[0]),a[1])).collectAsMap()                          
+    return(hostelTitle)
+
+#搜尋對應的推薦資料
+def searchXY(category, name):
+    with open('{}.data'.format(category), 'r') as f:
+	for line in f:
+	    temp= line.split(',')
+	    if name == str(temp[1]):
+		return str(temp[2]),str(temp[3])
+
+#判斷前端是要搜尋什麼的推薦
+def Recommend(model, Title, inputUserID, category, x): 
+    Recommend = model.recommendProducts(inputUserID, 5) 
+    print("使用者" + str(inputUserID) + "推薦儲存")
+    temp={}
+    num=1
+    for rmd in Recommend:
+	temp['Attraction{}'.format(num)]=Title[rmd[1]]
+	if x == 1 :
+	    temp['longitude{}'.format(num)],temp['latitude{}'.format(num)]=searchXY('attraction', str(Title[rmd[1]]))
+	elif x == 2 :
+	    temp['longitude{}'.format(num)],temp['latitude{}'.format(num)]=searchXY('business', str(Title[rmd[1]]))
+	elif x == 3 :
+	    temp['longitude{}'.format(num)],temp['latitude{}'.format(num)]=searchXY('restaurant', str(Title[rmd[1]]))
+	elif x == 4 :
+	    temp['longitude{}'.format(num)],temp['latitude{}'.format(num)]=searchXY('hostel', str(Title[rmd[1]]))
+	num+=1
+    temp['category']=str(category)
+    return temp
+    
+if __name__ == "__main__":
+    sc=CreateSparkContext()
+    (attractionTitle) = Prepareattraction(sc)		#讀取景點資料 
+    (businessTitle) = Preparebusiness(sc)		#讀取商家資料 
+    (restaurantTitle) = Preparerestaurant(sc)		#讀取餐廳資料 
+    (hostelTitle) = Preparehostel(sc)			#讀取旅館資料 
+    attractionmodel = MatrixFactorizationModel.load(sc, "/home/mis/ALS/attractionALSmodel")	#讀取景點的推薦模型
+    businessmodel = MatrixFactorizationModel.load(sc, "/home/mis/ALS/businessALSmodel")		#讀取商家的推薦模型
+    restaurantmodel = MatrixFactorizationModel.load(sc, "/home/mis/ALS/restaurantALSmodel")	#讀取餐廳的推薦模型
+    hostelmodel = MatrixFactorizationModel.load(sc, "/home/mis/ALS/hostelALSmodel")		#讀取旅館的推薦模型
+    app.run(host='0.0.0.0',port='7516',debug=False)	#啟動伺服器
+

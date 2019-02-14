@@ -1,0 +1,92 @@
+# -*- coding: UTF-8 -*-
+from pyspark.mllib.recommendation import ALS
+from pyspark import SparkConf, SparkContext
+import subprocess
+
+def SetLogger( sc ):
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
+    logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)    
+
+def SetPath(sc):
+    global Path
+    if sc.master[0:5]=="local" :
+        Path="file:/home/mis/mis/"
+    else:   
+        Path="hdfs://master:9000/user/mis/"
+
+def CreateSparkContext():
+    sparkConf = SparkConf().setAppName("RecommendTrain").set("spark.ui.showConsoleProgress", "false") 
+    sc = SparkContext(conf = sparkConf)
+    print ("master="+sc.master)    
+    SetLogger(sc)
+    SetPath(sc)
+    return (sc)
+    
+
+'''此段為讀取景點資料'''
+def Prepareattraction(sc):
+    rawUserData = sc.textFile(Path+"data/attractionscore.data")		'''讀取attractionscore.data檔的資料'''
+    rawRatings = rawUserData.map(lambda line: line.split(",")[:3] )	'''以,分割資料''''
+    ratingsRDD = rawRatings.map(lambda x: (x[0],x[1],x[2]))		'''建立陣列'''
+    return(ratingsRDD)
+
+'''此段為讀取商家資料 比照景點資料'''
+def Preparebusiness(sc):
+    rawUserData = sc.textFile(Path+"data/businessscore.data")
+    rawRatings = rawUserData.map(lambda line: line.split(",")[:3] )
+    ratingsRDD = rawRatings.map(lambda x: (x[0],x[1],x[2]))
+    return(ratingsRDD)
+
+'''此段為讀取餐廳資料 比照景點資料'''
+def Preparerestaurant(sc):
+    rawUserData = sc.textFile(Path+"data/restaurantscore.data")
+    rawRatings = rawUserData.map(lambda line: line.split(",")[:3] )
+    ratingsRDD = rawRatings.map(lambda x: (x[0],x[1],x[2]))
+    return(ratingsRDD)
+
+'''此段為讀取旅館資料 比照景點資料'''
+def Preparehostel(sc):
+    rawUserData = sc.textFile(Path+"data/hostelscore.data")
+    rawRatings = rawUserData.map(lambda line: line.split(",")[:3] )
+    ratingsRDD = rawRatings.map(lambda x: (x[0],x[1],x[2]))
+    return(ratingsRDD)
+
+def SaveModel(sc): 
+    try:
+        attractionmodel.save(sc , "file:/home/mis/ALS/attractionALSmodel")
+        businessmodel.save(sc , "file:/home/mis/ALS/businessALSmodel")
+        restaurantmodel.save(sc , "file:/home/mis/ALS/restaurantALSmodel")
+        hostelmodel.save(sc , "file:/home/mis/ALS/hostelALSmodel")
+    except Exception :
+        print "Model已經存在,請先刪除再儲存."  
+
+def deletedata():
+    subprocess.call(['hadoop', 'fs', '-rm', '-R', '/user/mis/data/attraction.data' , '/user/mis/data/business.data' , '/user/mis/data/hostel.data' , '/user/mis/data/restaurant.data' ,'/user/mis/data/attractionscore.data' ,'/user/mis/data/businessscore.data' ,'/user/mis/data/hostelscore.data' ,'/user/mis/data/restaurantscore.data' ,'/user/mis/data/user.data'])
+    subprocess.call(['sudo', 'rm', '-r', '/home/mis/ALS'])
+
+def makedata():
+    subprocess.call(['python3', '/home/mis/mis/getFirebase.py'])
+    subprocess.call(['hadoop', 'fs', '-copyFromLocal', '-f', '/home/mis/user.data' ,'/home/mis/attraction.data' ,'/home/mis/business.data' ,'/home/mis/hostel.data' ,'/home/mis/restaurant.data' ,'/home/mis/attractionscore.data' ,'/home/mis/businessscore.data' ,'/home/mis/hostelscore.data' ,'/home/mis/restaurantscore.data' ,'/user/mis/data'])
+  
+if __name__ == "__main__":
+    deletedata()				'''刪除舊資料'''
+    makedata()					'''建立新資料'''
+    sc=CreateSparkContext()			
+    print("進行推薦模型建立")
+    attractionRDD = Prepareattraction(sc)	'''呼叫Prepareattraction讀取景點資料'''
+    businessRDD= Preparebusiness(sc)		'''呼叫Preparebusiness讀取商家資料'''
+    restaurantRDD= Preparerestaurant(sc)	'''呼叫Preparerestaurant讀取餐廳資料'''
+    hostelRDD= Preparehostel(sc)		'''呼叫Preparehostel讀取旅館資料'''
+
+    attractionmodel = ALS.train(attractionRDD, 10, 10, 0.1)	'''建立景點推薦模型'''
+    businessmodel = ALS.train(businessRDD, 10, 10, 0.1)		'''建立商家推薦模型'''
+    restaurantmodel = ALS.train(restaurantRDD, 10, 10, 0.1)	'''建立餐廳推薦模型'''
+    hostelmodel = ALS.train(hostelRDD, 10, 10, 0.1)		'''建立旅館推薦模型'''
+    SaveModel(sc)						'''儲存所有模型'''
+    
+
+
+
+
